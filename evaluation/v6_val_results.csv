@@ -1,0 +1,31 @@
+video,query,ground_truth_start,ground_truth_end,predicted_start,predicted_end,iou,similarity_score,confidence,llm_selected,llm_relevance,llm_reason,query_latency_sec
+12XD3,person looks outy the window.,4.1,11.9,6.0,9.0,0.3846153846153846,0.2238,0.1,False,0.1,The person is not looking out the window in any of the frames.,39.49
+1F706,person a girl runs into the room.,0.0,3.4,23.0,26.0,0.0,0.2899,0.1,False,0.1,"The image shows a person leaning against a door, but does not depict running into the room.",31.27
+1FIGA,person puts the book inside.,15.5,23.7,12.0,13.0,0.0,0.2517,0.95,True,0.95,The person is shown placing a book inside the locker.,36.37
+1NJOQ,a person walks through the doorway.,0.0,5.9,1.0,5.0,0.6779661016949152,0.2831,0.1,False,0.1,"The image shows a person standing still, but does not show them walking through a doorway.",35.57
+36T5X,person begins to undress.,24.0,34.0,29.5,31.5,0.2,0.255,0.1,False,0.1,The person is adjusting his shirt but not undressing.,50.81
+735W9,person puts it on the table.,16.8,23.8,23.0,24.0,0.11111111111111122,0.24,0.95,True,0.95,The person is placing a dark object on the table.,45.42
+874F1,the person drinks from a glass.,0.0,3.6,0.0,3.0,0.8333333333333333,0.272,0.95,True,0.95,The person is clearly drinking from a glass in the second frame.,44.4
+8SXHK,a person sits typing on a laptop computer.,13.8,19.8,1.2,6.8,0.0,0.3242,0.95,True,0.95,The person is sitting and typing on a laptop computer within the specified time window.,50.68
+95GB4,person playing with a phone.,0.0,11.2,1.0,5.0,0.35714285714285715,0.2911,0.95,True,0.95,The person is holding and looking at a phone.,49.75
+9O0NP,a person looks through a book.,0.0,8.3,4.0,6.0,0.24096385542168672,0.224,0.1,False,0.1,"The image shows a person unpacking a blender box, not looking through a book.",49.36
+A3XXB,a person is tidying a blanket.,0.0,5.6,1.2,3.2,0.35714285714285715,0.2588,0.1,False,0.1,"The person is present in the images, but there is no clear evidence of them tidying a blanket.",40.46
+BO12I,another person is closing a refrigerator.,3.1,17.7,7.0,8.0,0.0684931506849315,0.2603,0.95,True,0.95,The second frame clearly shows a person closing the refrigerator door.,51.64
+FAO7J,person closing the door behind them.,37.3,43.6,5.2,8.3,0.0,0.3067,0.1,False,0.1,The image shows a person in the doorway but does not clearly show them closing the door.,58.32
+GH19N,a person opens a door holding a book.,1.7,9.5,1.0,6.0,0.5058823529411764,0.2998,0.95,True,0.95,The video clearly shows a person opening a door while holding a book.,52.72
+JVLAZ,person drinks water from a cup.,19.4,29.5,24.3,26.1,0.17821782178217827,0.3144,0.95,True,0.95,The person is shown drinking water from a cup in multiple frames.,54.58
+KCRQU,the person opens the refrigerator.,17.2,24.3,26.3,27.8,0.0,0.3102,0.95,True,0.95,The person is shown opening the refrigerator door in frame 27.0.,64.03
+LLQBB,person takes their shoes off.,17.0,30.7,23.5,25.5,0.14598540145985403,0.2739,0.1,False,0.1,"The person is adjusting their jeans, not taking off shoes.",57.04
+MA6GY,person begins to take some medicine.,9.5,16.0,10.2,11.2,0.15384615384615385,0.2834,0.1,False,0.1,"The person is holding a pill and a small container, but it's unclear if they are taking medicine.",51.73
+MZ3X9,person holding the phone.,17.7,27.7,1.0,4.0,0.0,0.2445,0.95,True,0.95,The person in the second image is holding a phone.,44.29
+O1LMX,a person holds a book.,1.9,14.3,5.1,6.1,0.08064516129032258,0.2752,0.95,True,0.95,The person in the image is holding a book.,49.2
+O1LMX,person opens up the laptop.,11.5,18.8,20.0,29.0,0.0,0.2783,0.85,True,0.85,The person is shown opening the laptop.,50.19
+OE243,a person takes a box off some stairs.,0.0,3.9,1.2,3.8,0.6666666666666666,0.353,0.95,True,0.95,The second frame clearly shows a person taking a box off some stairs.,56.74
+OZ02A,person a light is turned on.,2.9,11.8,21.0,23.0,0.0,0.2529,0.0,False,0.0,"The image shows two people kneeling near a box and a ceiling fan, but there is no indication of a light being turned on.",53.09
+QMHK8,the person undresses (removes socks.,20.1,44.4,38.0,42.0,0.16460905349794241,0.2726,0.0,False,0.0,"The image shows a person leaning against a door, but there is no clear visual evidence of them removing socks.",61.22
+RKJ0C,person sits at the table eating food.,8.4,14.4,18.0,21.0,0.0,0.2699,0.85,True,0.85,The person is sitting at a table and eating food from a bowl.,45.65
+RKJ0C,a laughing person walks into their kitchen.,0.0,14.4,28.3,29.3,0.0,0.2652,0.1,False,0.1,"The image shows a person sitting at a kitchen table with a bowl of liquid, but does not show them walking or laughing.",51.41
+UR5TU,a person opens a pantry door.,0.4,7.4,12.0,21.0,0.0,0.3185,0.95,True,0.95,The person is clearly opening the pantry door in frame 16.,61.01
+YQT32,person takes several pictures of different things in the room.,17.8,27.2,1.0,2.0,0.0,0.2857,0.1,False,0.1,The images show a room with furniture and decorations but do not clearly depict someone taking pictures.,52.65
+ZF7YA,a person runs down a few stairs.,0.0,6.5,0.0,3.0,0.46153846153846156,0.3192,0.95,True,0.95,The person is running down the stairs.,53.3
+ZZ4GP,a person is standing at a stove cooking.,0.0,11.9,5.0,9.0,0.3361344537815126,0.316,0.1,False,0.1,"The image shows a person in the kitchen, but they are not actively cooking at a stove.",57.44

@@ -5,8 +5,17 @@ import VideoPlayer from "./components/VideoPlayer";
 import { VideoUpload } from "./components/VideoUpload";
 import type { PipelineType, VideoMetadata } from "./types";
 
+function formatPipelineLabel(pipeline: PipelineType): string {
+  if (pipeline === "v6") return "v6 (CLIP + LLM Boundary)";
+  if (pipeline === "v5") return "v5 (No-CLAHE Multi-Index)";
+  if (pipeline === "v4") return "New (v4 — LLM Gate + CLIP/YOLO/OCR + Rerank)";
+  if (pipeline === "v3") return "V3 (CLIP + NMS + LLM Rerank)";
+  if (pipeline === "v2") return "V2 (CLIP + Temporal Grounding)";
+  return "Old (v1 — CLIP)";
+}
+
 export default function App() {
-  const [pipeline, setPipeline] = useState<PipelineType>("v2");
+  const [pipeline, setPipeline] = useState<PipelineType>("v6");
   const [videos, setVideos] = useState<VideoMetadata[]>([]);
   const [selectedVideo, setSelectedVideo] = useState<VideoMetadata | null>(null);
   const [seekTime, setSeekTime] = useState<number | null>(null);
@@ -16,6 +25,9 @@ export default function App() {
     setVideos(items);
     if (!selectedVideo && items.length > 0) {
       setSelectedVideo(items[0]);
+    } else if (selectedVideo) {
+      const fresh = items.find((item) => item.video_id === selectedVideo.video_id);
+      if (fresh) setSelectedVideo(fresh);
     }
   };
 
@@ -28,10 +40,19 @@ export default function App() {
     const timer = setInterval(async () => {
       const updated = await getVideoStatus(selectedVideo.video_id);
       setSelectedVideo(updated);
-      setVideos((prev) => prev.map((v) => (v.video_id === updated.video_id ? updated : v)));
+      setVideos((prev) =>
+        prev.map((v) => (v.video_id === updated.video_id ? updated : v))
+      );
     }, 2000);
     return () => clearInterval(timer);
   }, [selectedVideo?.video_id, selectedVideo?.status]);
+
+  const handleVideoUpdated = (updated: VideoMetadata) => {
+    setSelectedVideo(updated);
+    setVideos((prev) =>
+      prev.map((v) => (v.video_id === updated.video_id ? updated : v))
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 max-w-6xl mx-auto space-y-6">
@@ -39,7 +60,7 @@ export default function App() {
         <div>
           <h1 className="text-2xl font-bold">ChronoVision / MomentSearch</h1>
           <p className="text-sm text-gray-600">
-            Active Pipeline: <strong>{pipeline === "v2" ? "New (v2)" : "Old (v1)"}</strong>
+            Active Pipeline: <strong>{formatPipelineLabel(pipeline)}</strong>
           </p>
         </div>
       </header>
@@ -57,21 +78,26 @@ export default function App() {
 
           <div className="p-4 border rounded-lg bg-white space-y-2">
             <h2 className="font-semibold text-sm">Videos</h2>
-            {videos.map((v) => (
-              <button
-                key={v.video_id}
-                type="button"
-                onClick={() => setSelectedVideo(v)}
-                className={`w-full text-left p-2 rounded border text-xs ${
-                  selectedVideo?.video_id === v.video_id ? "border-blue-600 bg-blue-50" : "border-gray-200"
-                }`}
-              >
-                <div className="font-medium truncate">{v.filename}</div>
-                <div className="text-gray-500">
-                  {v.status} ({v.progress}%) • {v.pipeline?.toUpperCase() || "V1"}
-                </div>
-              </button>
-            ))}
+            {videos.map((v) => {
+              const videoPipeline = (v.pipeline || "v1").toUpperCase();
+              return (
+                <button
+                  key={v.video_id}
+                  type="button"
+                  onClick={() => setSelectedVideo(v)}
+                  className={`w-full text-left p-2 rounded border text-xs ${
+                    selectedVideo?.video_id === v.video_id
+                      ? "border-blue-600 bg-blue-50"
+                      : "border-gray-200"
+                  }`}
+                >
+                  <div className="font-medium truncate">{v.filename}</div>
+                  <div className="text-gray-500">
+                    {v.status} ({v.progress}%) • {videoPipeline}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -85,16 +111,230 @@ export default function App() {
             pipeline={pipeline}
             onPipelineChange={setPipeline}
             onSelectTimestamp={(sec) => setSeekTime(sec)}
-            onVideoUpdated={(updated) => {
-              setSelectedVideo(updated);
-              setVideos((prev) => prev.map((v) => (v.video_id === updated.video_id ? updated : v)));
-            }}
+            onVideoUpdated={handleVideoUpdated}
           />
         </div>
       </div>
     </div>
   );
 }
+
+// import { useEffect, useState } from "react";
+// import { getVideoStatus, listVideos } from "./api/client";
+// import { SearchPanel } from "./components/SearchPanel";
+// import VideoPlayer from "./components/VideoPlayer";
+// import { VideoUpload } from "./components/VideoUpload";
+// import type { PipelineType, VideoMetadata } from "./types";
+
+// function formatPipelineLabel(pipeline: PipelineType): string {
+//   if (pipeline === "v4") return "New (v4 — LLM Gate + CLIP/YOLO/OCR + Rerank)";
+//   if (pipeline === "v3") return "V3 (CLIP + NMS + LLM Rerank)";
+//   if (pipeline === "v2") return "V2 (CLIP + Temporal Grounding)";
+//   return "Old (v1 — CLIP)";
+// }
+
+// export default function App() {
+//   const [pipeline, setPipeline] = useState<PipelineType>("v4");
+//   const [videos, setVideos] = useState<VideoMetadata[]>([]);
+//   const [selectedVideo, setSelectedVideo] = useState<VideoMetadata | null>(null);
+//   const [seekTime, setSeekTime] = useState<number | null>(null);
+
+//   const refreshVideos = async () => {
+//     const items = await listVideos();
+//     setVideos(items);
+//     if (!selectedVideo && items.length > 0) {
+//       setSelectedVideo(items[0]);
+//     } else if (selectedVideo) {
+//       const fresh = items.find((item) => item.video_id === selectedVideo.video_id);
+//       if (fresh) setSelectedVideo(fresh);
+//     }
+//   };
+
+//   useEffect(() => {
+//     refreshVideos();
+//   }, []);
+
+//   useEffect(() => {
+//     if (!selectedVideo || selectedVideo.status !== "processing") return;
+//     const timer = setInterval(async () => {
+//       const updated = await getVideoStatus(selectedVideo.video_id);
+//       setSelectedVideo(updated);
+//       setVideos((prev) =>
+//         prev.map((v) => (v.video_id === updated.video_id ? updated : v))
+//       );
+//     }, 2000);
+//     return () => clearInterval(timer);
+//   }, [selectedVideo?.video_id, selectedVideo?.status]);
+
+//   const handleVideoUpdated = (updated: VideoMetadata) => {
+//     setSelectedVideo(updated);
+//     setVideos((prev) =>
+//       prev.map((v) => (v.video_id === updated.video_id ? updated : v))
+//     );
+//   };
+
+//   return (
+//     <div className="min-h-screen bg-gray-50 p-6 max-w-6xl mx-auto space-y-6">
+//       <header className="flex items-center justify-between">
+//         <div>
+//           <h1 className="text-2xl font-bold">ChronoVision / MomentSearch</h1>
+//           <p className="text-sm text-gray-600">
+//             Active Pipeline: <strong>{formatPipelineLabel(pipeline)}</strong>
+//           </p>
+//         </div>
+//       </header>
+
+//       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+//         <div className="space-y-4">
+//           <VideoUpload
+//             pipeline={pipeline}
+//             onPipelineChange={setPipeline}
+//             onUploaded={(vid) => {
+//               setVideos((prev) => [vid, ...prev]);
+//               setSelectedVideo(vid);
+//             }}
+//           />
+
+//           <div className="p-4 border rounded-lg bg-white space-y-2">
+//             <h2 className="font-semibold text-sm">Videos</h2>
+//             {videos.map((v) => {
+//               const videoPipeline = (v.pipeline || "v1").toUpperCase();
+//               return (
+//                 <button
+//                   key={v.video_id}
+//                   type="button"
+//                   onClick={() => setSelectedVideo(v)}
+//                   className={`w-full text-left p-2 rounded border text-xs ${
+//                     selectedVideo?.video_id === v.video_id
+//                       ? "border-blue-600 bg-blue-50"
+//                       : "border-gray-200"
+//                   }`}
+//                 >
+//                   <div className="font-medium truncate">{v.filename}</div>
+//                   <div className="text-gray-500">
+//                     {v.status} ({v.progress}%) • {videoPipeline}
+//                   </div>
+//                 </button>
+//               );
+//             })}
+//           </div>
+//         </div>
+
+//         <div className="lg:col-span-2 space-y-4">
+//           {selectedVideo && (
+//             <VideoPlayer video={selectedVideo} seekToSeconds={seekTime} />
+//           )}
+
+//           <SearchPanel
+//             video={selectedVideo}
+//             pipeline={pipeline}
+//             onPipelineChange={setPipeline}
+//             onSelectTimestamp={(sec) => setSeekTime(sec)}
+//             onVideoUpdated={handleVideoUpdated}
+//           />
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
+
+// import { useEffect, useState } from "react";
+// import { getVideoStatus, listVideos } from "./api/client";
+// import { SearchPanel } from "./components/SearchPanel";
+// import VideoPlayer from "./components/VideoPlayer";
+// import { VideoUpload } from "./components/VideoUpload";
+// import type { PipelineType, VideoMetadata } from "./types";
+
+// export default function App() {
+//   const [pipeline, setPipeline] = useState<PipelineType>("v2");
+//   const [videos, setVideos] = useState<VideoMetadata[]>([]);
+//   const [selectedVideo, setSelectedVideo] = useState<VideoMetadata | null>(null);
+//   const [seekTime, setSeekTime] = useState<number | null>(null);
+
+//   const refreshVideos = async () => {
+//     const items = await listVideos();
+//     setVideos(items);
+//     if (!selectedVideo && items.length > 0) {
+//       setSelectedVideo(items[0]);
+//     }
+//   };
+
+//   useEffect(() => {
+//     refreshVideos();
+//   }, []);
+
+//   useEffect(() => {
+//     if (!selectedVideo || selectedVideo.status !== "processing") return;
+//     const timer = setInterval(async () => {
+//       const updated = await getVideoStatus(selectedVideo.video_id);
+//       setSelectedVideo(updated);
+//       setVideos((prev) => prev.map((v) => (v.video_id === updated.video_id ? updated : v)));
+//     }, 2000);
+//     return () => clearInterval(timer);
+//   }, [selectedVideo?.video_id, selectedVideo?.status]);
+
+//   return (
+//     <div className="min-h-screen bg-gray-50 p-6 max-w-6xl mx-auto space-y-6">
+//       <header className="flex items-center justify-between">
+//         <div>
+//           <h1 className="text-2xl font-bold">ChronoVision / MomentSearch</h1>
+//           <p className="text-sm text-gray-600">
+//             Active Pipeline: <strong>{pipeline === "v2" ? "New (v2)" : "Old (v1)"}</strong>
+//           </p>
+//         </div>
+//       </header>
+
+//       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+//         <div className="space-y-4">
+//           <VideoUpload
+//             pipeline={pipeline}
+//             onPipelineChange={setPipeline}
+//             onUploaded={(vid) => {
+//               setVideos((prev) => [vid, ...prev]);
+//               setSelectedVideo(vid);
+//             }}
+//           />
+
+//           <div className="p-4 border rounded-lg bg-white space-y-2">
+//             <h2 className="font-semibold text-sm">Videos</h2>
+//             {videos.map((v) => (
+//               <button
+//                 key={v.video_id}
+//                 type="button"
+//                 onClick={() => setSelectedVideo(v)}
+//                 className={`w-full text-left p-2 rounded border text-xs ${
+//                   selectedVideo?.video_id === v.video_id ? "border-blue-600 bg-blue-50" : "border-gray-200"
+//                 }`}
+//               >
+//                 <div className="font-medium truncate">{v.filename}</div>
+//                 <div className="text-gray-500">
+//                   {v.status} ({v.progress}%) • {v.pipeline?.toUpperCase() || "V1"}
+//                 </div>
+//               </button>
+//             ))}
+//           </div>
+//         </div>
+
+//         <div className="lg:col-span-2 space-y-4">
+//           {selectedVideo && (
+//             <VideoPlayer video={selectedVideo} seekToSeconds={seekTime} />
+//           )}
+
+//           <SearchPanel
+//             video={selectedVideo}
+//             pipeline={pipeline}
+//             onPipelineChange={setPipeline}
+//             onSelectTimestamp={(sec) => setSeekTime(sec)}
+//             onVideoUpdated={(updated) => {
+//               setSelectedVideo(updated);
+//               setVideos((prev) => prev.map((v) => (v.video_id === updated.video_id ? updated : v)));
+//             }}
+//           />
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
 
 // import React, { useEffect, useState } from 'react';
 // import {

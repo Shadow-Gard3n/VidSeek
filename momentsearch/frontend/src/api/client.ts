@@ -22,7 +22,7 @@ export async function getVideoStatus(videoId: string): Promise<VideoMetadata> {
 
 export async function uploadVideo(
   file: File,
-  pipeline: PipelineType = "v1"
+  pipeline: PipelineType = "v6"
 ): Promise<VideoMetadata> {
   const formData = new FormData();
   formData.append("file", file);
@@ -36,7 +36,7 @@ export async function uploadVideo(
 
 export async function processVideo(
   videoId: string,
-  pipeline: PipelineType = "v1",
+  pipeline: PipelineType = "v6",
   samplingFps = 1.0
 ): Promise<VideoMetadata> {
   const { data } = await api.post<VideoMetadata>(`/api/videos/${videoId}/process`, {
@@ -53,7 +53,8 @@ export async function searchVideo(
   topK = 5,
   mergeGapSec = 2.5,
   llmProvider: LLMProviderType = "ollama",
-  llmModel?: string
+  llmModel?: string,
+  rerank = true
 ): Promise<SearchResponse> {
   const { data } = await api.post<SearchResponse>(`/api/videos/${videoId}/search`, {
     query,
@@ -62,6 +63,7 @@ export async function searchVideo(
     merge_gap_sec: mergeGapSec,
     llm_provider: llmProvider,
     llm_model: llmModel || null,
+    rerank,
   });
   return data;
 }
@@ -73,9 +75,190 @@ export function getVideoStreamUrl(videoId: string): string {
 export const getStreamUrl = getVideoStreamUrl;
 
 export function resolveAssetUrl(pathOrUrl: string): string {
+  if (!pathOrUrl) return "";
   if (pathOrUrl.startsWith("http")) return pathOrUrl;
   return `${api.defaults.baseURL}${pathOrUrl}`;
 }
+
+// import axios from "axios";
+// import type {
+//   LLMProviderType,
+//   PipelineType,
+//   SearchResponse,
+//   VideoMetadata,
+// } from "../types";
+
+// const api = axios.create({
+//   baseURL: "http://localhost:8000",
+// });
+
+// export async function listVideos(): Promise<VideoMetadata[]> {
+//   const { data } = await api.get<VideoMetadata[]>("/api/videos");
+//   return data;
+// }
+
+// export async function getVideoStatus(videoId: string): Promise<VideoMetadata> {
+//   const { data } = await api.get<VideoMetadata>(`/api/videos/${videoId}/status`);
+//   return data;
+// }
+
+// export async function uploadVideo(
+//   file: File,
+//   pipeline: PipelineType = "v1"
+// ): Promise<VideoMetadata> {
+//   const formData = new FormData();
+//   formData.append("file", file);
+//   formData.append("pipeline", pipeline);
+
+//   const { data } = await api.post<VideoMetadata>("/api/videos/upload", formData, {
+//     headers: { "Content-Type": "multipart/form-data" },
+//   });
+//   return data;
+// }
+
+// export async function processVideo(
+//   videoId: string,
+//   pipeline: PipelineType = "v1",
+//   samplingFps = 1.0
+// ): Promise<VideoMetadata> {
+//   const { data } = await api.post<VideoMetadata>(`/api/videos/${videoId}/process`, {
+//     pipeline,
+//     sampling_fps: samplingFps,
+//   });
+//   return data;
+// }
+
+// export async function searchVideo(
+//   videoId: string,
+//   query: string,
+//   pipeline?: PipelineType,
+//   topK = 5,
+//   mergeGapSec = 2.5,
+//   llmProvider: LLMProviderType = "ollama",
+//   llmModel?: string,
+//   rerank = true
+// ): Promise<SearchResponse> {
+//   const { data } = await api.post<SearchResponse>(`/api/videos/${videoId}/search`, {
+//     query,
+//     pipeline,
+//     top_k: topK,
+//     merge_gap_sec: mergeGapSec,
+//     llm_provider: llmProvider,
+//     llm_model: llmModel || null,
+//     rerank,
+//   });
+//   return data;
+// }
+
+// // export async function searchVideo(
+// //   videoId: string,
+// //   query: string,
+// //   pipeline?: PipelineType,
+// //   topK = 5,
+// //   mergeGapSec = 2.5,
+// //   llmProvider: LLMProviderType = "ollama",
+// //   llmModel?: string
+// // ): Promise<SearchResponse> {
+// //   const { data } = await api.post<SearchResponse>(`/api/videos/${videoId}/search`, {
+// //     query,
+// //     pipeline,
+// //     top_k: topK,
+// //     merge_gap_sec: mergeGapSec,
+// //     llm_provider: llmProvider,
+// //     llm_model: llmModel || null,
+// //   });
+// //   return data;
+// // }
+
+// export function getVideoStreamUrl(videoId: string): string {
+//   return `${api.defaults.baseURL}/api/videos/${videoId}/stream`;
+// }
+
+// export const getStreamUrl = getVideoStreamUrl;
+
+// export function resolveAssetUrl(pathOrUrl: string): string {
+//   if (pathOrUrl.startsWith("http")) return pathOrUrl;
+//   return `${api.defaults.baseURL}${pathOrUrl}`;
+// }
+
+// import axios from "axios";
+// import type {
+//   LLMProviderType,
+//   PipelineType,
+//   SearchResponse,
+//   VideoMetadata,
+// } from "../types";
+
+// const api = axios.create({
+//   baseURL: "http://localhost:8000",
+// });
+
+// export async function listVideos(): Promise<VideoMetadata[]> {
+//   const { data } = await api.get<VideoMetadata[]>("/api/videos");
+//   return data;
+// }
+
+// export async function getVideoStatus(videoId: string): Promise<VideoMetadata> {
+//   const { data } = await api.get<VideoMetadata>(`/api/videos/${videoId}/status`);
+//   return data;
+// }
+
+// export async function uploadVideo(
+//   file: File,
+//   pipeline: PipelineType = "v1"
+// ): Promise<VideoMetadata> {
+//   const formData = new FormData();
+//   formData.append("file", file);
+//   formData.append("pipeline", pipeline);
+
+//   const { data } = await api.post<VideoMetadata>("/api/videos/upload", formData, {
+//     headers: { "Content-Type": "multipart/form-data" },
+//   });
+//   return data;
+// }
+
+// export async function processVideo(
+//   videoId: string,
+//   pipeline: PipelineType = "v1",
+//   samplingFps = 1.0
+// ): Promise<VideoMetadata> {
+//   const { data } = await api.post<VideoMetadata>(`/api/videos/${videoId}/process`, {
+//     pipeline,
+//     sampling_fps: samplingFps,
+//   });
+//   return data;
+// }
+
+// export async function searchVideo(
+//   videoId: string,
+//   query: string,
+//   pipeline?: PipelineType,
+//   topK = 5,
+//   mergeGapSec = 2.5,
+//   llmProvider: LLMProviderType = "ollama",
+//   llmModel?: string
+// ): Promise<SearchResponse> {
+//   const { data } = await api.post<SearchResponse>(`/api/videos/${videoId}/search`, {
+//     query,
+//     pipeline,
+//     top_k: topK,
+//     merge_gap_sec: mergeGapSec,
+//     llm_provider: llmProvider,
+//     llm_model: llmModel || null,
+//   });
+//   return data;
+// }
+
+// export function getVideoStreamUrl(videoId: string): string {
+//   return `${api.defaults.baseURL}/api/videos/${videoId}/stream`;
+// }
+
+// export const getStreamUrl = getVideoStreamUrl;
+
+// export function resolveAssetUrl(pathOrUrl: string): string {
+//   if (pathOrUrl.startsWith("http")) return pathOrUrl;
+//   return `${api.defaults.baseURL}${pathOrUrl}`;
+// }
 
 // import axios from "axios";
 // import type { PipelineType, SearchResponse, VideoMetadata } from "../types";

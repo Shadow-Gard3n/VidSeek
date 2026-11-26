@@ -13,6 +13,10 @@ import database as db
 from embedding import embedding_service
 from pipeline_v2 import process_video_task_v2
 
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
 
 # ============================================================
 # TEMPORAL CLUSTERING & 1D IoU NMS

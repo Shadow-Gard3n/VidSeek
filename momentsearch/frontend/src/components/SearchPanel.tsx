@@ -28,31 +28,57 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
   const [matches, setMatches] = useState<SearchMatch[]>([]);
   const [disclaimer, setDisclaimer] = useState<string | null>(null);
   const [searching, setSearching] = useState(false);
+  const [reranking, setReranking] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const usesLlm =
+    pipeline === "v3" || pipeline === "v4" || pipeline === "v5" || pipeline === "v6";
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!video || !query.trim()) return;
 
     setSearching(true);
+    setReranking(false);
     setError(null);
+    const cleanQuery = query.trim();
+
     try {
-      const res = await searchVideo(
+      const fastRes = await searchVideo(
         video.video_id,
-        query.trim(),
+        cleanQuery,
         pipeline,
         5,
         2.5,
         llmProvider,
-        llmModel.trim() || undefined
+        llmModel.trim() || undefined,
+        false
       );
-      setMatches(res.results);
-      setDisclaimer(res.disclaimer);
+      setMatches(fastRes.results);
+      setDisclaimer(fastRes.disclaimer);
+      setSearching(false);
+
+      if (usesLlm && llmProvider !== "none" && fastRes.results.length > 0) {
+        setReranking(true);
+        const rerankedRes = await searchVideo(
+          video.video_id,
+          cleanQuery,
+          pipeline,
+          5,
+          2.5,
+          llmProvider,
+          llmModel.trim() || undefined,
+          true
+        );
+        setMatches(rerankedRes.results);
+        setDisclaimer(rerankedRes.disclaimer);
+      }
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Search failed.");
     } finally {
       setSearching(false);
+      setReranking(false);
     }
   };
 
@@ -72,7 +98,6 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
 
   return (
     <div className="space-y-4 p-4 border rounded-lg bg-white">
-      {/* Pipeline & LLM Reranker Controls */}
       <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold">Search Pipeline:</span>
@@ -83,10 +108,13 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
           >
             <option value="v1">Old Pipeline (v1 — CLIP)</option>
             <option value="v2">V2 Pipeline (CLIP + Grounding)</option>
-            <option value="v3">New Pipeline (v3 — CLIP + NMS + LLM Rerank)</option>
+            <option value="v3">V3 Pipeline (CLIP + NMS + LLM Rerank)</option>
+            <option value="v4">V4 Pipeline (LLM Gate + CLIP/YOLO/OCR + Rerank)</option>
+            <option value="v5">v5 (No-CLAHE Multi-Index)</option>
+            <option value="v6">v6 (CLIP + LLM Boundary)</option>
           </select>
 
-          {pipeline === "v3" && (
+          {usesLlm && (
             <>
               <select
                 value={llmProvider}
@@ -95,7 +123,7 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
               >
                 <option value="ollama">LLM: Local Ollama</option>
                 <option value="gemini">LLM: Gemini API</option>
-                <option value="none">LLM: None (CLIP + NMS only)</option>
+                <option value="none">LLM: None (CLIP only)</option>
               </select>
 
               {llmProvider !== "none" && (
@@ -104,7 +132,9 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                   value={llmModel}
                   onChange={(e) => setLlmModel(e.target.value)}
                   placeholder={
-                    llmProvider === "ollama" ? "Model (e.g., qwen2.5vl:7b)" : "Model (e.g., gemini-2.5-flash)"
+                    llmProvider === "ollama"
+                      ? "Model (e.g., gemma3:4b)"
+                      : "Model (e.g., gemini-2.5-flash)"
                   }
                   className="border rounded px-2.5 py-1 text-xs w-44"
                 />
@@ -125,35 +155,39 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
         )}
       </div>
 
-      {/* Search Form */}
       <form onSubmit={handleSearch} className="flex gap-2">
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          disabled={!video || video.status !== "completed" || searching}
+          disabled={!video || video.status !== "completed" || searching || reranking}
           placeholder={
             !video
               ? "Select a video first..."
               : video.status !== "completed"
               ? `Video status: ${video.status}...`
-              : "Search moments (e.g., person near counter)..."
+              : "Search moments (e.g., person near counter, timestamp or sign)..."
           }
           className="flex-1 border rounded px-3 py-2 text-sm"
         />
         <button
           type="submit"
-          disabled={!video || video.status !== "completed" || searching || !query.trim()}
+          disabled={
+            !video ||
+            video.status !== "completed" ||
+            searching ||
+            reranking ||
+            !query.trim()
+          }
           className="px-4 py-2 rounded bg-blue-600 text-white text-sm font-medium disabled:opacity-50"
         >
-          {searching ? "Searching..." : "Search"}
+          {searching ? "Searching..." : reranking ? "LLM Verifying..." : "Search"}
         </button>
       </form>
 
       {error && <p className="text-xs text-red-600">{error}</p>}
       {disclaimer && <p className="text-xs text-gray-500 italic">{disclaimer}</p>}
 
-      {/* Results Timeline */}
       <div className="space-y-3">
         {matches.map((item) => (
           <div
@@ -182,8 +216,10 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                     )}
                   </div>
                   <div className="text-xs text-gray-500">
-                    Peak: {item.peak_timestamp}s • CLIP Sim: {item.similarity_score}
-                    {item.confidence != null ? ` • Conf: ${(item.confidence * 100).toFixed(1)}%` : ""}
+                    Peak: {item.peak_timestamp}s • Score: {item.similarity_score}
+                    {item.confidence != null
+                      ? ` • Conf: ${(item.confidence * 100).toFixed(1)}%`
+                      : ""}
                   </div>
                 </div>
               </div>
@@ -200,6 +236,18 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
                 </span>
               )}
             </div>
+
+            {item.detected_objects && item.detected_objects.length > 0 && (
+              <div className="text-xs text-gray-700">
+                <strong>Objects:</strong> {item.detected_objects.join(", ")}
+              </div>
+            )}
+
+            {item.ocr_text && (
+              <div className="text-xs text-gray-700">
+                <strong>OCR:</strong> "{item.ocr_text}"
+              </div>
+            )}
 
             {item.llm_reason && (
               <div className="text-xs text-emerald-900 bg-emerald-100/70 rounded px-2.5 py-1.5">
@@ -225,6 +273,780 @@ export const SearchPanel: React.FC<SearchPanelProps> = ({
     </div>
   );
 };
+
+// import React, { useState } from "react";
+// import { processVideo, resolveAssetUrl, searchVideo } from "../api/client";
+// import type {
+//   LLMProviderType,
+//   PipelineType,
+//   SearchMatch,
+//   VideoMetadata,
+// } from "../types";
+
+// interface SearchPanelProps {
+//   video: VideoMetadata | null;
+//   pipeline: PipelineType;
+//   onPipelineChange: (p: PipelineType) => void;
+//   onSelectTimestamp: (seconds: number) => void;
+//   onVideoUpdated: (video: VideoMetadata) => void;
+// }
+
+// export const SearchPanel: React.FC<SearchPanelProps> = ({
+//   video,
+//   pipeline,
+//   onPipelineChange,
+//   onSelectTimestamp,
+//   onVideoUpdated,
+// }) => {
+//   const [query, setQuery] = useState("");
+//   const [llmProvider, setLlmProvider] = useState<LLMProviderType>("ollama");
+//   const [llmModel, setLlmModel] = useState("");
+//   const [matches, setMatches] = useState<SearchMatch[]>([]);
+//   const [disclaimer, setDisclaimer] = useState<string | null>(null);
+//   const [searching, setSearching] = useState(false);
+//   const [reprocessing, setReprocessing] = useState(false);
+//   const [error, setError] = useState<string | null>(null);
+
+//   const usesLlm = pipeline === "v3" || pipeline === "v4" || pipeline === "v5";
+
+//   const [reranking, setReranking] = useState(false);
+
+// const handleSearch = async (e: React.FormEvent) => {
+//   e.preventDefault();
+//   if (!video || !query.trim()) return;
+
+//   setSearching(true);
+//   setReranking(false);
+//   setError(null);
+//   const cleanQuery = query.trim();
+
+//   try {
+//     // Phase 1: Instant retrieval & timeline fusion (< 1s)
+//     const fastRes = await searchVideo(
+//       video.video_id,
+//       cleanQuery,
+//       pipeline,
+//       5,
+//       2.5,
+//       llmProvider,
+//       llmModel.trim() || undefined,
+//       false
+//     );
+//     setMatches(fastRes.results);
+//     setDisclaimer(fastRes.disclaimer);
+//     setSearching(false);
+
+//     // Phase 2: Background VLM rerank if enabled
+//     if (usesLlm && llmProvider !== "none" && fastRes.results.length > 0) {
+//       setReranking(true);
+//       const rerankedRes = await searchVideo(
+//         video.video_id,
+//         cleanQuery,
+//         pipeline,
+//         5,
+//         2.5,
+//         llmProvider,
+//         llmModel.trim() || undefined,
+//         true
+//       );
+//       setMatches(rerankedRes.results);
+//       setDisclaimer(rerankedRes.disclaimer);
+//     }
+//   } catch (err: any) {
+//     setError(err?.response?.data?.detail || "Search failed.");
+//   } finally {
+//     setSearching(false);
+//     setReranking(false);
+//   }
+// };
+
+//   // const handleSearch = async (e: React.FormEvent) => {
+//   //   e.preventDefault();
+//   //   if (!video || !query.trim()) return;
+
+//   //   setSearching(true);
+//   //   setError(null);
+//   //   try {
+//   //     const res = await searchVideo(
+//   //       video.video_id,
+//   //       query.trim(),
+//   //       pipeline,
+//   //       5,
+//   //       2.5,
+//   //       llmProvider,
+//   //       llmModel.trim() || undefined
+//   //     );
+//   //     setMatches(res.results);
+//   //     setDisclaimer(res.disclaimer);
+//   //   } catch (err: any) {
+//   //     setError(err?.response?.data?.detail || "Search failed.");
+//   //   } finally {
+//   //     setSearching(false);
+//   //   }
+//   // };
+
+//   const handleReprocessWithPipeline = async () => {
+//     if (!video) return;
+//     setReprocessing(true);
+//     setError(null);
+//     try {
+//       const updated = await processVideo(video.video_id, pipeline);
+//       onVideoUpdated(updated);
+//     } catch (err: any) {
+//       setError(err?.response?.data?.detail || "Re-processing failed.");
+//     } finally {
+//       setReprocessing(false);
+//     }
+//   };
+
+//   return (
+//     <div className="space-y-4 p-4 border rounded-lg bg-white">
+//       {/* Pipeline & LLM Controls */}
+//       <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b">
+//         <div className="flex flex-wrap items-center gap-2">
+//           <span className="text-sm font-semibold">Search Pipeline:</span>
+//           <select
+//             value={pipeline}
+//             onChange={(e) => onPipelineChange(e.target.value as PipelineType)}
+//             className="border rounded px-2.5 py-1 text-sm bg-gray-50"
+//           >
+//             <option value="v1">Old Pipeline (v1 — CLIP)</option>
+//             <option value="v2">V2 Pipeline (CLIP + Grounding)</option>
+//             <option value="v3">V3 Pipeline (CLIP + NMS + LLM Rerank)</option>
+//             <option value="v4">V4 Pipeline (LLM Gate + CLIP/YOLO/OCR + Rerank)</option>
+//             <option value="v5">v5 (No-CLAHE Multi-Index)</option>
+//           </select>
+
+//           {usesLlm && (
+//             <>
+//               <select
+//                 value={llmProvider}
+//                 onChange={(e) => setLlmProvider(e.target.value as LLMProviderType)}
+//                 className="border rounded px-2.5 py-1 text-sm bg-gray-50"
+//               >
+//                 <option value="ollama">LLM: Local Ollama</option>
+//                 <option value="gemini">LLM: Gemini API</option>
+//                 <option value="none">LLM: None (Heuristic/CLIP only)</option>
+//               </select>
+
+//               {llmProvider !== "none" && (
+//                 <input
+//                   type="text"
+//                   value={llmModel}
+//                   onChange={(e) => setLlmModel(e.target.value)}
+//                   placeholder={
+//                     llmProvider === "ollama"
+//                       ? "Model (e.g., gemma3:4b)"
+//                       : "Model (e.g., gemini-2.5-flash)"
+//                   }
+//                   className="border rounded px-2.5 py-1 text-xs w-44"
+//                 />
+//               )}
+//             </>
+//           )}
+//         </div>
+
+//         {video && (
+//           <button
+//             type="button"
+//             onClick={handleReprocessWithPipeline}
+//             disabled={reprocessing}
+//             className="text-xs px-3 py-1.5 rounded bg-gray-800 text-white disabled:opacity-50"
+//           >
+//             {reprocessing ? "Indexing..." : `Index Video with ${pipeline.toUpperCase()}`}
+//           </button>
+//         )}
+//       </div>
+
+//       {/* Search Form */}
+//       <form onSubmit={handleSearch} className="flex gap-2">
+//         <input
+//           type="text"
+//           value={query}
+//           onChange={(e) => setQuery(e.target.value)}
+//           disabled={!video || video.status !== "completed" || searching}
+//           placeholder={
+//             !video
+//               ? "Select a video first..."
+//               : video.status !== "completed"
+//               ? `Video status: ${video.status}...`
+//               : "Search moments (e.g., person near counter, timestamp or sign)..."
+//           }
+//           className="flex-1 border rounded px-3 py-2 text-sm"
+//         />
+//         <button
+//           type="submit"
+//           disabled={!video || video.status !== "completed" || searching || !query.trim()}
+//           className="px-4 py-2 rounded bg-blue-600 text-white text-sm font-medium disabled:opacity-50"
+//         >
+//           {searching ? "Searching..." : "Search"}
+//         </button>
+//       </form>
+
+//       {error && <p className="text-xs text-red-600">{error}</p>}
+//       {disclaimer && <p className="text-xs text-gray-500 italic">{disclaimer}</p>}
+
+//       {/* Results Timeline */}
+//       <div className="space-y-3">
+//         {matches.map((item) => (
+//           <div
+//             key={`${item.rank}-${item.start_time}`}
+//             onClick={() => onSelectTimestamp(item.start_time)}
+//             className={`p-3 border rounded-lg hover:border-blue-500 cursor-pointer transition space-y-2 ${
+//               item.llm_selected ? "border-emerald-500 bg-emerald-50/40" : ""
+//             }`}
+//           >
+//             <div className="flex items-center justify-between gap-2">
+//               <div className="flex items-center gap-3">
+//                 <img
+//                   src={resolveAssetUrl(item.thumbnail_url)}
+//                   alt={`Match ${item.rank}`}
+//                   className="w-20 h-12 object-cover rounded"
+//                 />
+//                 <div>
+//                   <div className="font-semibold text-sm flex items-center gap-2">
+//                     <span>
+//                       #{item.rank} • {item.start_time}s – {item.end_time}s
+//                     </span>
+//                     {item.llm_selected && (
+//                       <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-600 text-white font-semibold">
+//                         BEST MATCH ({llmProvider.toUpperCase()})
+//                       </span>
+//                     )}
+//                   </div>
+//                   <div className="text-xs text-gray-500">
+//                     Peak: {item.peak_timestamp}s • Score: {item.similarity_score}
+//                     {item.confidence != null
+//                       ? ` • Conf: ${(item.confidence * 100).toFixed(1)}%`
+//                       : ""}
+//                   </div>
+//                 </div>
+//               </div>
+
+//               {item.ai_review_flag && (
+//                 <span
+//                   className={`text-xs px-2 py-0.5 rounded font-semibold ${
+//                     item.ai_review_flag === "verified"
+//                       ? "bg-emerald-100 text-emerald-800"
+//                       : "bg-amber-100 text-amber-800"
+//                   }`}
+//                 >
+//                   {item.ai_review_flag.replace("_", " ")}
+//                 </span>
+//               )}
+//             </div>
+
+//             {item.detected_objects && item.detected_objects.length > 0 && (
+//               <div className="text-xs text-gray-700">
+//                 <strong>Objects:</strong> {item.detected_objects.join(", ")}
+//               </div>
+//             )}
+
+//             {item.ocr_text && (
+//               <div className="text-xs text-gray-700">
+//                 <strong>OCR:</strong> "{item.ocr_text}"
+//               </div>
+//             )}
+
+//             {item.llm_reason && (
+//               <div className="text-xs text-emerald-900 bg-emerald-100/70 rounded px-2.5 py-1.5">
+//                 <strong>LLM Reason:</strong> {item.llm_reason}
+//               </div>
+//             )}
+
+//             {item.keyframes && item.keyframes.length > 0 && (
+//               <div className="flex gap-2 pt-1">
+//                 {item.keyframes.map((kf, i) => (
+//                   <img
+//                     key={i}
+//                     src={resolveAssetUrl(kf)}
+//                     alt={`Keyframe ${i + 1}`}
+//                     className="w-16 h-10 object-cover rounded border"
+//                   />
+//                 ))}
+//               </div>
+//             )}
+//           </div>
+//         ))}
+//       </div>
+//     </div>
+//   );
+// };
+
+// import React, { useState } from "react";
+// import { processVideo, resolveAssetUrl, searchVideo } from "../api/client";
+// import type {
+//   LLMProviderType,
+//   PipelineType,
+//   SearchMatch,
+//   VideoMetadata,
+// } from "../types";
+
+// interface SearchPanelProps {
+//   video: VideoMetadata | null;
+//   pipeline: PipelineType;
+//   onPipelineChange: (p: PipelineType) => void;
+//   onSelectTimestamp: (seconds: number) => void;
+//   onVideoUpdated: (video: VideoMetadata) => void;
+// }
+
+// export const SearchPanel: React.FC<SearchPanelProps> = ({
+//   video,
+//   pipeline,
+//   onPipelineChange,
+//   onSelectTimestamp,
+//   onVideoUpdated,
+// }) => {
+//   const [query, setQuery] = useState("");
+//   const [llmProvider, setLlmProvider] = useState<LLMProviderType>("ollama");
+//   const [llmModel, setLlmModel] = useState("");
+//   const [matches, setMatches] = useState<SearchMatch[]>([]);
+//   const [disclaimer, setDisclaimer] = useState<string | null>(null);
+//   const [searching, setSearching] = useState(false);
+//   const [reprocessing, setReprocessing] = useState(false);
+//   const [error, setError] = useState<string | null>(null);
+
+//   const usesLlm = pipeline === "v3" || pipeline === "v4";
+
+//   const handleSearch = async (e: React.FormEvent) => {
+//     e.preventDefault();
+//     if (!video || !query.trim()) return;
+
+//     setSearching(true);
+//     setError(null);
+//     try {
+//       const res = await searchVideo(
+//         video.video_id,
+//         query.trim(),
+//         pipeline,
+//         5,
+//         2.5,
+//         llmProvider,
+//         llmModel.trim() || undefined
+//       );
+//       setMatches(res.results);
+//       setDisclaimer(res.disclaimer);
+//     } catch (err: any) {
+//       setError(err?.response?.data?.detail || "Search failed.");
+//     } finally {
+//       setSearching(false);
+//     }
+//   };
+
+//   const handleReprocessWithPipeline = async () => {
+//     if (!video) return;
+//     setReprocessing(true);
+//     setError(null);
+//     try {
+//       const updated = await processVideo(video.video_id, pipeline);
+//       onVideoUpdated(updated);
+//     } catch (err: any) {
+//       setError(err?.response?.data?.detail || "Re-processing failed.");
+//     } finally {
+//       setReprocessing(false);
+//     }
+//   };
+
+//   return (
+//     <div className="space-y-4 p-4 border rounded-lg bg-white">
+//       {/* Pipeline & LLM Controls */}
+//       <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b">
+//         <div className="flex flex-wrap items-center gap-2">
+//           <span className="text-sm font-semibold">Search Pipeline:</span>
+//           <select
+//             value={pipeline}
+//             onChange={(e) => onPipelineChange(e.target.value as PipelineType)}
+//             className="border rounded px-2.5 py-1 text-sm bg-gray-50"
+//           >
+//             <option value="v1">Old Pipeline (v1 — CLIP)</option>
+//             <option value="v2">V2 Pipeline (CLIP + Grounding)</option>
+//             <option value="v3">V3 Pipeline (CLIP + NMS + LLM Rerank)</option>
+//             <option value="v4">New Pipeline (v4 — LLM Gate + CLIP/YOLO/OCR + Rerank)</option>
+//           </select>
+
+//           {usesLlm && (
+//             <>
+//               <select
+//                 value={llmProvider}
+//                 onChange={(e) => setLlmProvider(e.target.value as LLMProviderType)}
+//                 className="border rounded px-2.5 py-1 text-sm bg-gray-50"
+//               >
+//                 <option value="ollama">LLM: Local Ollama</option>
+//                 <option value="gemini">LLM: Gemini API</option>
+//                 <option value="none">LLM: None (Heuristic/CLIP only)</option>
+//               </select>
+
+//               {llmProvider !== "none" && (
+//                 <input
+//                   type="text"
+//                   value={llmModel}
+//                   onChange={(e) => setLlmModel(e.target.value)}
+//                   placeholder={
+//                     llmProvider === "ollama"
+//                       ? "Model (e.g., gemma3:4b)"
+//                       : "Model (e.g., gemini-2.5-flash)"
+//                   }
+//                   className="border rounded px-2.5 py-1 text-xs w-44"
+//                 />
+//               )}
+//             </>
+//           )}
+//         </div>
+
+//         {video && (
+//           <button
+//             type="button"
+//             onClick={handleReprocessWithPipeline}
+//             disabled={reprocessing}
+//             className="text-xs px-3 py-1.5 rounded bg-gray-800 text-white disabled:opacity-50"
+//           >
+//             {reprocessing ? "Indexing..." : `Index Video with ${pipeline.toUpperCase()}`}
+//           </button>
+//         )}
+//       </div>
+
+//       {/* Search Form */}
+//       <form onSubmit={handleSearch} className="flex gap-2">
+//         <input
+//           type="text"
+//           value={query}
+//           onChange={(e) => setQuery(e.target.value)}
+//           disabled={!video || video.status !== "completed" || searching}
+//           placeholder={
+//             !video
+//               ? "Select a video first..."
+//               : video.status !== "completed"
+//               ? `Video status: ${video.status}...`
+//               : "Search moments (e.g., person near counter, timestamp or sign)..."
+//           }
+//           className="flex-1 border rounded px-3 py-2 text-sm"
+//         />
+//         <button
+//           type="submit"
+//           disabled={!video || video.status !== "completed" || searching || !query.trim()}
+//           className="px-4 py-2 rounded bg-blue-600 text-white text-sm font-medium disabled:opacity-50"
+//         >
+//           {searching ? "Searching..." : "Search"}
+//         </button>
+//       </form>
+
+//       {error && <p className="text-xs text-red-600">{error}</p>}
+//       {disclaimer && <p className="text-xs text-gray-500 italic">{disclaimer}</p>}
+
+//       {/* Results Timeline */}
+//       <div className="space-y-3">
+//         {matches.map((item) => (
+//           <div
+//             key={`${item.rank}-${item.start_time}`}
+//             onClick={() => onSelectTimestamp(item.start_time)}
+//             className={`p-3 border rounded-lg hover:border-blue-500 cursor-pointer transition space-y-2 ${
+//               item.llm_selected ? "border-emerald-500 bg-emerald-50/40" : ""
+//             }`}
+//           >
+//             <div className="flex items-center justify-between gap-2">
+//               <div className="flex items-center gap-3">
+//                 <img
+//                   src={resolveAssetUrl(item.thumbnail_url)}
+//                   alt={`Match ${item.rank}`}
+//                   className="w-20 h-12 object-cover rounded"
+//                 />
+//                 <div>
+//                   <div className="font-semibold text-sm flex items-center gap-2">
+//                     <span>
+//                       #{item.rank} • {item.start_time}s – {item.end_time}s
+//                     </span>
+//                     {item.llm_selected && (
+//                       <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-600 text-white font-semibold">
+//                         BEST MATCH ({llmProvider.toUpperCase()})
+//                       </span>
+//                     )}
+//                   </div>
+//                   <div className="text-xs text-gray-500">
+//                     Peak: {item.peak_timestamp}s • Score: {item.similarity_score}
+//                     {item.confidence != null
+//                       ? ` • Conf: ${(item.confidence * 100).toFixed(1)}%`
+//                       : ""}
+//                   </div>
+//                 </div>
+//               </div>
+
+//               {item.ai_review_flag && (
+//                 <span
+//                   className={`text-xs px-2 py-0.5 rounded font-semibold ${
+//                     item.ai_review_flag === "verified"
+//                       ? "bg-emerald-100 text-emerald-800"
+//                       : "bg-amber-100 text-amber-800"
+//                   }`}
+//                 >
+//                   {item.ai_review_flag.replace("_", " ")}
+//                 </span>
+//               )}
+//             </div>
+
+//             {item.detected_objects && item.detected_objects.length > 0 && (
+//               <div className="text-xs text-gray-700">
+//                 <strong>Objects:</strong> {item.detected_objects.join(", ")}
+//               </div>
+//             )}
+
+//             {item.ocr_text && (
+//               <div className="text-xs text-gray-700">
+//                 <strong>OCR:</strong> "{item.ocr_text}"
+//               </div>
+//             )}
+
+//             {item.llm_reason && (
+//               <div className="text-xs text-emerald-900 bg-emerald-100/70 rounded px-2.5 py-1.5">
+//                 <strong>LLM Reason:</strong> {item.llm_reason}
+//               </div>
+//             )}
+
+//             {item.keyframes && item.keyframes.length > 0 && (
+//               <div className="flex gap-2 pt-1">
+//                 {item.keyframes.map((kf, i) => (
+//                   <img
+//                     key={i}
+//                     src={resolveAssetUrl(kf)}
+//                     alt={`Keyframe ${i + 1}`}
+//                     className="w-16 h-10 object-cover rounded border"
+//                   />
+//                 ))}
+//               </div>
+//             )}
+//           </div>
+//         ))}
+//       </div>
+//     </div>
+//   );
+// };
+
+// import React, { useState } from "react";
+// import { processVideo, resolveAssetUrl, searchVideo } from "../api/client";
+// import type {
+//   LLMProviderType,
+//   PipelineType,
+//   SearchMatch,
+//   VideoMetadata,
+// } from "../types";
+
+// interface SearchPanelProps {
+//   video: VideoMetadata | null;
+//   pipeline: PipelineType;
+//   onPipelineChange: (p: PipelineType) => void;
+//   onSelectTimestamp: (seconds: number) => void;
+//   onVideoUpdated: (video: VideoMetadata) => void;
+// }
+
+// export const SearchPanel: React.FC<SearchPanelProps> = ({
+//   video,
+//   pipeline,
+//   onPipelineChange,
+//   onSelectTimestamp,
+//   onVideoUpdated,
+// }) => {
+//   const [query, setQuery] = useState("");
+//   const [llmProvider, setLlmProvider] = useState<LLMProviderType>("ollama");
+//   const [llmModel, setLlmModel] = useState("");
+//   const [matches, setMatches] = useState<SearchMatch[]>([]);
+//   const [disclaimer, setDisclaimer] = useState<string | null>(null);
+//   const [searching, setSearching] = useState(false);
+//   const [reprocessing, setReprocessing] = useState(false);
+//   const [error, setError] = useState<string | null>(null);
+
+//   const handleSearch = async (e: React.FormEvent) => {
+//     e.preventDefault();
+//     if (!video || !query.trim()) return;
+
+//     setSearching(true);
+//     setError(null);
+//     try {
+//       const res = await searchVideo(
+//         video.video_id,
+//         query.trim(),
+//         pipeline,
+//         5,
+//         2.5,
+//         llmProvider,
+//         llmModel.trim() || undefined
+//       );
+//       setMatches(res.results);
+//       setDisclaimer(res.disclaimer);
+//     } catch (err: any) {
+//       setError(err?.response?.data?.detail || "Search failed.");
+//     } finally {
+//       setSearching(false);
+//     }
+//   };
+
+//   const handleReprocessWithPipeline = async () => {
+//     if (!video) return;
+//     setReprocessing(true);
+//     setError(null);
+//     try {
+//       const updated = await processVideo(video.video_id, pipeline);
+//       onVideoUpdated(updated);
+//     } catch (err: any) {
+//       setError(err?.response?.data?.detail || "Re-processing failed.");
+//     } finally {
+//       setReprocessing(false);
+//     }
+//   };
+
+//   return (
+//     <div className="space-y-4 p-4 border rounded-lg bg-white">
+//       {/* Pipeline & LLM Reranker Controls */}
+//       <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b">
+//         <div className="flex flex-wrap items-center gap-2">
+//           <span className="text-sm font-semibold">Search Pipeline:</span>
+//           <select
+//             value={pipeline}
+//             onChange={(e) => onPipelineChange(e.target.value as PipelineType)}
+//             className="border rounded px-2.5 py-1 text-sm bg-gray-50"
+//           >
+//             <option value="v1">Old Pipeline (v1 — CLIP)</option>
+//             <option value="v2">V2 Pipeline (CLIP + Grounding)</option>
+//             <option value="v3">New Pipeline (v3 — CLIP + NMS + LLM Rerank)</option>
+//           </select>
+
+//           {pipeline === "v3" && (
+//             <>
+//               <select
+//                 value={llmProvider}
+//                 onChange={(e) => setLlmProvider(e.target.value as LLMProviderType)}
+//                 className="border rounded px-2.5 py-1 text-sm bg-gray-50"
+//               >
+//                 <option value="ollama">LLM: Local Ollama</option>
+//                 <option value="gemini">LLM: Gemini API</option>
+//                 <option value="none">LLM: None (CLIP + NMS only)</option>
+//               </select>
+
+//               {llmProvider !== "none" && (
+//                 <input
+//                   type="text"
+//                   value={llmModel}
+//                   onChange={(e) => setLlmModel(e.target.value)}
+//                   placeholder={
+//                     llmProvider === "ollama" ? "Model (e.g., qwen2.5vl:7b)" : "Model (e.g., gemini-2.5-flash)"
+//                   }
+//                   className="border rounded px-2.5 py-1 text-xs w-44"
+//                 />
+//               )}
+//             </>
+//           )}
+//         </div>
+
+//         {video && (
+//           <button
+//             type="button"
+//             onClick={handleReprocessWithPipeline}
+//             disabled={reprocessing}
+//             className="text-xs px-3 py-1.5 rounded bg-gray-800 text-white disabled:opacity-50"
+//           >
+//             {reprocessing ? "Indexing..." : `Index Video with ${pipeline.toUpperCase()}`}
+//           </button>
+//         )}
+//       </div>
+
+//       {/* Search Form */}
+//       <form onSubmit={handleSearch} className="flex gap-2">
+//         <input
+//           type="text"
+//           value={query}
+//           onChange={(e) => setQuery(e.target.value)}
+//           disabled={!video || video.status !== "completed" || searching}
+//           placeholder={
+//             !video
+//               ? "Select a video first..."
+//               : video.status !== "completed"
+//               ? `Video status: ${video.status}...`
+//               : "Search moments (e.g., person near counter)..."
+//           }
+//           className="flex-1 border rounded px-3 py-2 text-sm"
+//         />
+//         <button
+//           type="submit"
+//           disabled={!video || video.status !== "completed" || searching || !query.trim()}
+//           className="px-4 py-2 rounded bg-blue-600 text-white text-sm font-medium disabled:opacity-50"
+//         >
+//           {searching ? "Searching..." : "Search"}
+//         </button>
+//       </form>
+
+//       {error && <p className="text-xs text-red-600">{error}</p>}
+//       {disclaimer && <p className="text-xs text-gray-500 italic">{disclaimer}</p>}
+
+//       {/* Results Timeline */}
+//       <div className="space-y-3">
+//         {matches.map((item) => (
+//           <div
+//             key={`${item.rank}-${item.start_time}`}
+//             onClick={() => onSelectTimestamp(item.start_time)}
+//             className={`p-3 border rounded-lg hover:border-blue-500 cursor-pointer transition space-y-2 ${
+//               item.llm_selected ? "border-emerald-500 bg-emerald-50/40" : ""
+//             }`}
+//           >
+//             <div className="flex items-center justify-between gap-2">
+//               <div className="flex items-center gap-3">
+//                 <img
+//                   src={resolveAssetUrl(item.thumbnail_url)}
+//                   alt={`Match ${item.rank}`}
+//                   className="w-20 h-12 object-cover rounded"
+//                 />
+//                 <div>
+//                   <div className="font-semibold text-sm flex items-center gap-2">
+//                     <span>
+//                       #{item.rank} • {item.start_time}s – {item.end_time}s
+//                     </span>
+//                     {item.llm_selected && (
+//                       <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-600 text-white font-semibold">
+//                         BEST MATCH ({llmProvider.toUpperCase()})
+//                       </span>
+//                     )}
+//                   </div>
+//                   <div className="text-xs text-gray-500">
+//                     Peak: {item.peak_timestamp}s • CLIP Sim: {item.similarity_score}
+//                     {item.confidence != null ? ` • Conf: ${(item.confidence * 100).toFixed(1)}%` : ""}
+//                   </div>
+//                 </div>
+//               </div>
+
+//               {item.ai_review_flag && (
+//                 <span
+//                   className={`text-xs px-2 py-0.5 rounded font-semibold ${
+//                     item.ai_review_flag === "verified"
+//                       ? "bg-emerald-100 text-emerald-800"
+//                       : "bg-amber-100 text-amber-800"
+//                   }`}
+//                 >
+//                   {item.ai_review_flag.replace("_", " ")}
+//                 </span>
+//               )}
+//             </div>
+
+//             {item.llm_reason && (
+//               <div className="text-xs text-emerald-900 bg-emerald-100/70 rounded px-2.5 py-1.5">
+//                 <strong>LLM Reason:</strong> {item.llm_reason}
+//               </div>
+//             )}
+
+//             {item.keyframes && item.keyframes.length > 0 && (
+//               <div className="flex gap-2 pt-1">
+//                 {item.keyframes.map((kf, i) => (
+//                   <img
+//                     key={i}
+//                     src={resolveAssetUrl(kf)}
+//                     alt={`Keyframe ${i + 1}`}
+//                     className="w-16 h-10 object-cover rounded border"
+//                   />
+//                 ))}
+//               </div>
+//             )}
+//           </div>
+//         ))}
+//       </div>
+//     </div>
+//   );
+// };
 
 // import React, { useState } from "react";
 // import { processVideo, resolveAssetUrl, searchVideo } from "../api/client";

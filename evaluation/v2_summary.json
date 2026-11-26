@@ -1,0 +1,26 @@
+{
+    "pipeline": "v2",
+    "model": "CLIP ViT-B/32",
+    "preprocessing": {
+        "coarse_extraction": "ffmpeg 2x fps",
+        "frame_selection": "laplacian sharpest-frame window",
+        "image_enhancement": "fastNlMeansDenoisingColored + LAB CLAHE + unsharp mask",
+        "aspect_handling": "224x224 1:1 neutral-gray letterbox pad (114)"
+    },
+    "grounding": {
+        "smoothing_window": 3,
+        "threshold": "max(mean + 0.5*std, 0.20)",
+        "merge_gap_sec": 2.0,
+        "nms_iou": 0.5
+    },
+    "retrieval": "FAISS IndexFlatIP",
+    "embedding_dimension": 512,
+    "sampling_fps": 1.0,
+    "top_k": 10,
+    "queries_evaluated": 150,
+    "videos_evaluated": 138,
+    "recall_at_1_iou_0.3": 40.0,
+    "recall_at_1_iou_0.5": 24.0,
+    "recall_at_1_iou_0.7": 11.333333333333332,
+    "mean_iou": 0.2561104964711311
+}
