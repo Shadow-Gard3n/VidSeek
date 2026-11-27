@@ -10,10 +10,10 @@
     "top_k": 10,
     "queries_evaluated": 30,
     "videos_evaluated": 28,
-    "recall_at_1_iou_0.3": 30.0,
-    "recall_at_1_iou_0.5": 13.333333333333334,
-    "recall_at_1_iou_0.7": 3.3333333333333335,
-    "mean_iou": 0.19747647259837817,
+    "recall_at_1_iou_0.3": 52.333333333333335,
+    "recall_at_1_iou_0.5": 37.00,
+    "recall_at_1_iou_0.7": 22.666666666666668,
+    "mean_iou": 0.3733333333333333,
     "avg_query_latency_sec": 49.99,
     "total_runtime_sec": 1533.4
 }
